@@ -1,25 +1,41 @@
 """
 TikTok Uploader
 ===============
-Uses your real Chrome browser with your existing TikTok login.
+Uses Edge on Windows, Chrome on Mac with your existing TikTok login.
 Generates AI captions with fixed hashtags.
 """
 
 import asyncio
 import os
+import platform
 import random
 from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-CHROME_PROFILE = Path.home() / "Library/Application Support/Google/Chrome/TikTokBot"
-CHROME_EXECUTABLE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+SESSION_FILE = Path(__file__).parent / "tiktok_session.json"
+
+# Browser paths per platform
+if platform.system() == "Darwin":
+    BROWSER_PROFILE = Path.home() / "Library/Application Support/Google/Chrome"
+    BROWSER_EXECUTABLE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    PROFILE_DIR = "TikTokBot"
+    SELECT_ALL = "Meta+a"
+elif platform.system() == "Windows":
+    BROWSER_PROFILE = Path.home() / "AppData/Local/Microsoft/Edge/User Data"
+    BROWSER_EXECUTABLE = "C:/Program Files/Microsoft/Edge/Application/msedge.exe"
+    PROFILE_DIR = "TikTokBot"
+    SELECT_ALL = "Control+a"
+else:
+    BROWSER_PROFILE = Path.home() / ".config/google-chrome"
+    BROWSER_EXECUTABLE = "/usr/bin/google-chrome"
+    PROFILE_DIR = "TikTokBot"
+    SELECT_ALL = "Control+a"
 
 FIXED_HASHTAGS = "#fyp #foryoupage #trending #viral #story"
 
 
 def generate_caption(video_title: str, clip_title: str) -> str:
-    """Use GPT-4 to write a catchy TikTok caption."""
     try:
         from openai import OpenAI
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
@@ -28,8 +44,7 @@ def generate_caption(video_title: str, clip_title: str) -> str:
             messages=[{"role": "user", "content": f'Write a short catchy TikTok caption (max 100 characters, no hashtags) for a clip called "{clip_title}" from a video titled "{video_title}". Make it engaging with emojis. Just the caption text, nothing else.'}],
             max_tokens=100,
         )
-        caption = response.choices[0].message.content.strip()
-        return f"{caption}\n\n{FIXED_HASHTAGS}"
+        return f"{response.choices[0].message.content.strip()}\n\n{FIXED_HASHTAGS}"
     except Exception as e:
         print(f"    Could not generate AI caption: {e}")
         return f"{clip_title}\n\n{FIXED_HASHTAGS}"
@@ -42,20 +57,22 @@ async def human_delay(min_ms=800, max_ms=2000):
 async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
     async with async_playwright() as p:
 
-        print("    Opening your Chrome browser with existing TikTok session...")
+        print(f"    Opening browser ({platform.system()})...")
 
         context = await p.chromium.launch_persistent_context(
-            user_data_dir=str(CHROME_PROFILE),
-            executable_path=CHROME_EXECUTABLE,
+            user_data_dir=str(BROWSER_PROFILE),
+            executable_path=BROWSER_EXECUTABLE,
             headless=False,
             args=[
                 "--disable-blink-features=AutomationControlled",
-                "--profile-directory=TikTokBot",
+                "--no-first-run",
+                "--no-default-browser-check",
+                f"--profile-directory={PROFILE_DIR}",
             ],
             viewport={"width": 1280, "height": 800},
         )
 
-        # Close any blank pages
+        # Close blank pages
         for pg in context.pages:
             if pg.url == "about:blank":
                 await pg.close()
@@ -67,10 +84,9 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
         await page.goto("https://www.tiktok.com/upload", wait_until="domcontentloaded", timeout=30000)
         await human_delay(3000, 5000)
 
-        # If not logged in, wait for manual login
+        # Wait for login if needed
         if "login" in page.url:
-            print("\n    Not logged into TikTok in Chrome.")
-            print("    Please log in manually in the browser window, then wait...")
+            print("\n    Not logged in — please log in manually in the browser window...")
             await page.wait_for_url(
                 lambda url: "tiktok.com" in url and "login" not in url,
                 timeout=180000
@@ -79,7 +95,7 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
             await human_delay(3000, 5000)
 
         # Find file input with retries
-        print(f"    Waiting for upload area to load...")
+        print("    Waiting for upload area to load...")
         file_input = None
         for attempt in range(3):
             for frame in [page] + list(page.frames):
@@ -92,7 +108,7 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
                     continue
             if file_input:
                 break
-            print(f"    File input not found yet, waiting... (attempt {attempt+1}/3)")
+            print(f"    Waiting... (attempt {attempt+1}/3)")
             await human_delay(3000, 5000)
 
         if not file_input:
@@ -115,12 +131,8 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
         print("    File selected, waiting for video to process...")
         await human_delay(4000, 6000)
 
-        # Wait for caption field
-        caption_selectors = [
-            '[data-text="true"]',
-            '.public-DraftEditor-content',
-            '[contenteditable="true"]',
-        ]
+        # Find caption box
+        caption_selectors = ['[data-text="true"]', '.public-DraftEditor-content', '[contenteditable="true"]']
         caption_box = None
         for selector in caption_selectors:
             try:
@@ -145,60 +157,46 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
 
         if caption_box:
             caption_text = generate_caption(video_title or title, title)
-            # Split into main caption and hashtags
-            parts = caption_text.split("\n\n")
-            main_caption = parts[0]
-            hashtags = FIXED_HASHTAGS.split() if len(parts) < 2 else parts[1].split()
+            hashtags = FIXED_HASHTAGS.split()
 
-            print(f"    Caption: {main_caption[:80]}...")
             await caption_box.click()
             await human_delay(500, 1000)
-            await page.keyboard.press("Meta+a")
+            # Clear existing text (Control+a on Windows, Meta+a on Mac)
+            await page.keyboard.press(SELECT_ALL)
+            await human_delay(300, 500)
+            await page.keyboard.press("Delete")
             await human_delay(300, 500)
 
-            # Type each hashtag and click the first suggestion
+            # Type each hashtag and click suggestion
             for hashtag in hashtags:
                 tag = hashtag.lstrip("#")
                 await page.keyboard.type(f"#{tag}")
                 await human_delay(1000, 2000)
-
-                # Wait for dropdown and click first suggestion
                 try:
                     suggestion = page.locator(f"[data-e2e='search-suggest-item']:first-child, .tt-suggest-item:first-child, div[class*='suggest'] >> text=#{tag}").first
                     await suggestion.wait_for(state="visible", timeout=3000)
                     await suggestion.click()
                     print(f"    Clicked hashtag: #{tag}")
                 except Exception:
-                    # If no dropdown, just press space to move on
                     await page.keyboard.press("Space")
-
                 await human_delay(500, 800)
 
-            print("    Caption and hashtags typed.")
+            print("    Hashtags typed.")
 
         await human_delay(2000, 3000)
-
-        # Wait for video to finish processing
         print("    Waiting for video to finish processing...")
         await human_delay(5000, 8000)
 
         # Click Post with retries
         posted = False
-        post_selectors = [
-            "button:has-text('Post')",
-            "button:has-text('Upload')",
-            "[data-e2e='upload-btn']",
-            ".btn-post",
-            "button.submit",
-        ]
+        post_selectors = ["button:has-text('Post')", "button:has-text('Upload')", "[data-e2e='upload-btn']", ".btn-post"]
 
         for attempt in range(5):
             for frame in [page] + list(page.frames):
                 for selector in post_selectors:
                     try:
                         btn = frame.locator(selector)
-                        count = await btn.count()
-                        if count > 0:
+                        if await btn.count() > 0:
                             await btn.last.scroll_into_view_if_needed()
                             await human_delay(800, 1500)
                             await btn.last.click()
@@ -211,11 +209,11 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
                     break
             if posted:
                 break
-            print(f"    Post button not found yet, waiting... (attempt {attempt+1}/5)")
+            print(f"    Post button not found, waiting... (attempt {attempt+1}/5)")
             await human_delay(3000, 5000)
 
         if not posted:
-            print("    Could not find Post button — please click it manually in the browser.")
+            print("    Could not find Post button — please click it manually.")
             await page.wait_for_timeout(30000)
 
         await human_delay(4000, 6000)
@@ -223,7 +221,6 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
 
 
 def upload_to_tiktok(clip_path: Path, title: str, video_title: str = ""):
-    """Upload a clip to TikTok using your real Chrome browser."""
     print(f"\n[TikTok] Uploading: {clip_path.name}")
     try:
         asyncio.run(_upload_single(clip_path, title, video_title))
@@ -233,11 +230,3 @@ def upload_to_tiktok(clip_path: Path, title: str, video_title: str = ""):
         import traceback
         traceback.print_exc()
         return False
-
-
-def clear_tiktok_session():
-    """Force fresh login by clearing the profile copy."""
-    import shutil
-    if CHROME_PROFILE.exists():
-        shutil.rmtree(CHROME_PROFILE)
-        print("TikTok profile cleared.")

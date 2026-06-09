@@ -4,6 +4,8 @@ Run: python3 app.py  then open http://localhost:5000
 """
 
 import os
+import platform
+import subprocess
 import threading
 import uuid
 from pathlib import Path
@@ -18,6 +20,9 @@ app = Flask(__name__)
 jobs = {}
 
 SECRETS_FILE = Path(__file__).parent / "client_secrets.json"
+
+# Use python3 on Mac/Linux, python on Windows
+PYTHON = "python" if platform.system() == "Windows" else "python3"
 
 
 def is_tiktok_url(url):
@@ -71,7 +76,6 @@ def run_job(job_id, url, max_videos, use_ai, clips_per_video, clip_length, uploa
             log(f"Downloading: {video['title']}…", base + 10)
             video_path = yc.download_video(video)
 
-            # Only fetch transcript for YouTube videos (TikTok won't have captions)
             transcript = []
             if not is_tiktok_url(video["url"]):
                 log("Fetching captions…", base + 35)
@@ -99,6 +103,7 @@ def run_job(job_id, url, max_videos, use_ai, clips_per_video, clip_length, uploa
                 })
                 log(f"✓ Ready: {clip_info['title']}")
 
+                # TikTok first, then YouTube (avoids browser conflicts)
                 if upload_tiktok:
                     log(f"Uploading to TikTok: {clip_info['title']}…")
                     success = upload_to_tiktok(clip_path, clip_info["title"], video["title"])
@@ -107,13 +112,8 @@ def run_job(job_id, url, max_videos, use_ai, clips_per_video, clip_length, uploa
                 if upload_youtube and youtube:
                     log(f"Uploading to YouTube: {clip_info['title']}…")
                     try:
-                        import subprocess
-                        yt_clip_path = clip_path
                         duration = clip_info["end_seconds"] - clip_info["start_seconds"]
                         short_path = clip_path.parent / (clip_path.stem + "_yt_short.mp4")
-
-                        # Convert to vertical 9:16 (1080x1920) and cap at 59 seconds
-                        # Uses padding to add black bars if video is horizontal
                         t = min(duration, 59)
                         subprocess.run([
                             "ffmpeg", "-y", "-i", str(clip_path),
@@ -123,10 +123,7 @@ def run_job(job_id, url, max_videos, use_ai, clips_per_video, clip_length, uploa
                             "-c:a", "aac", "-b:a", "128k",
                             str(short_path)
                         ], capture_output=True)
-
-                        if short_path.exists():
-                            yt_clip_path = short_path
-
+                        yt_clip_path = short_path if short_path.exists() else clip_path
                         yc.upload_clip(youtube, yt_clip_path, clip_info, video["title"])
                         log(f"✓ Uploaded to YouTube: {clip_info['title']}")
                     except Exception as e:
@@ -196,7 +193,6 @@ download_jobs = {}
 
 
 def run_download(job_id, url):
-    import yt_dlp
     out_dir = yc.WORK_DIR / "downloads"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -224,9 +220,7 @@ def run_download(job_id, url):
             info = ydl.extract_info(url, download=True)
             title = info.get("title", "video")
             filename = ydl.prepare_filename(info)
-            # Ensure .mp4 extension
-            from pathlib import Path as P
-            filename = str(P(filename).with_suffix(".mp4"))
+            filename = str(Path(filename).with_suffix(".mp4"))
 
         download_jobs[job_id]["status"] = "done"
         download_jobs[job_id]["progress"] = 100
@@ -249,7 +243,6 @@ def download_video_route():
     data = request.json
     job_id = str(uuid.uuid4())[:8]
     download_jobs[job_id] = {"status": "running", "progress": 0, "message": "Starting…", "title": "", "filename": ""}
-
     threading.Thread(target=run_download, args=(job_id, data["url"]), daemon=True).start()
     return jsonify({"job_id": job_id})
 
