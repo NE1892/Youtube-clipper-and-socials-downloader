@@ -21,12 +21,12 @@ import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "your-openai-api-key-here")
-YOUTUBE_CLIENT_SECRETS = os.environ.get("YOUTUBE_CLIENT_SECRETS", "client_secrets.json")
+YOUTUBE_CLIENT_SECRETS = os.environ.get("YOUTUBE_CLIENT_SECRETS", str(Path(__file__).parent / "client_secrets.json"))
 WORK_DIR = Path(os.environ.get("WORK_DIR", str(Path(__file__).parent / "clipper_output")))
 CLIPS_PER_VIDEO = int(os.environ.get("CLIPS_PER_VIDEO", "3"))
-CLIP_LENGTH_MINUTES = int(os.environ.get("CLIP_LENGTH_MINUTES", "5"))
+CLIP_LENGTH_MINUTES = float(os.environ.get("CLIP_LENGTH_MINUTES", "5"))
 PROCESSED_LOG = WORK_DIR / "processed_videos.json"
-UPLOAD_PRIVACY = os.environ.get("UPLOAD_PRIVACY", "private")
+UPLOAD_PRIVACY = os.environ.get("UPLOAD_PRIVACY", "public")
 
 
 def ensure_dirs():
@@ -293,7 +293,7 @@ def get_youtube_service():
 def upload_clip(youtube, clip_path: Path, clip_info: dict, source_title: str):
     from googleapiclient.http import MediaFileUpload
 
-    title = f"{clip_info['title']} (from: {source_title})"[:100]
+    title = f"{source_title} #shorts #YouTubeShorts #clip"[:100]
     body = {
         "snippet": {"title": title, "description": clip_info.get("reason", ""),
                     "tags": ["highlight", "clip"], "categoryId": "22"},

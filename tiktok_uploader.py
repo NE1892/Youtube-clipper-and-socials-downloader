@@ -15,7 +15,7 @@ from playwright.async_api import async_playwright
 CHROME_PROFILE = Path.home() / "Library/Application Support/Google/Chrome/TikTokBot"
 CHROME_EXECUTABLE = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-FIXED_HASHTAGS = "#fyp #foryoupage #viral #trending #TikTok"
+FIXED_HASHTAGS = "#fyp #foryoupage #trending #viral #story"
 
 
 def generate_caption(video_title: str, clip_title: str) -> str:

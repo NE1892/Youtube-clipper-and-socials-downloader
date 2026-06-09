@@ -3,386 +3,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YT Clipper</title>
+<title>Auto-Clipper</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #0d0d0d;
-    --surface: #161616;
-    --surface2: #1f1f1f;
-    --border: #2a2a2a;
-    --accent: #ff3c3c;
-    --accent2: #ff7043;
-    --text: #f0f0f0;
-    --muted: #666;
-    --green: #00e676;
-    --mono: 'Space Mono', monospace;
-    --sans: 'DM Sans', sans-serif;
+    --bg: #0d0d0d; --surface: #161616; --surface2: #1f1f1f;
+    --border: #2a2a2a; --accent: #ff3c3c; --text: #f0f0f0;
+    --muted: #666; --green: #00e676; --mono: 'Space Mono', monospace; --sans: 'DM Sans', sans-serif;
   }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    padding: 0;
-  }
-
-  /* Grid background */
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
   body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(255,60,60,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,60,60,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(255,60,60,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,60,60,0.03) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none; z-index: 0;
   }
-
-  .wrap {
-    position: relative;
-    z-index: 1;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 60px 24px 80px;
+  .wrap { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; padding: 60px 24px 80px; }
+  header { margin-bottom: 48px; }
+  .logo { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase; margin-bottom: 16px; }
+  h1 { font-family: var(--mono); font-size: clamp(32px, 6vw, 52px); font-weight: 700; line-height: 1.1; }
+  h1 span { color: var(--accent); }
+  .subtitle { margin-top: 12px; color: var(--muted); font-size: 15px; font-weight: 300; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 2px; padding: 32px; margin-bottom: 24px; }
+  .field { margin-bottom: 24px; }
+  label { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  input[type="text"], input[type="number"] {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 2px;
+    color: var(--text); font-family: var(--mono); font-size: 14px; padding: 12px 16px; outline: none; transition: border-color 0.15s;
   }
-
-  header {
-    margin-bottom: 56px;
-  }
-
-  .logo {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.2em;
-    color: var(--accent);
-    text-transform: uppercase;
-    margin-bottom: 16px;
-  }
-
-  h1 {
-    font-family: var(--mono);
-    font-size: clamp(32px, 6vw, 52px);
-    font-weight: 700;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-  }
-
-  h1 span {
-    color: var(--accent);
-  }
-
-  .subtitle {
-    margin-top: 12px;
-    color: var(--muted);
-    font-size: 15px;
-    font-weight: 300;
-  }
-
-  /* Form */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    padding: 32px;
-    margin-bottom: 24px;
-  }
-
-  .field {
-    margin-bottom: 24px;
-  }
-
-  label {
-    display: block;
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
-
-  input[type="text"],
-  input[type="number"],
-  select {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 14px;
-    padding: 12px 16px;
-    outline: none;
-    transition: border-color 0.15s;
-    appearance: none;
-  }
-
-  input[type="text"]:focus,
-  input[type="number"]:focus,
-  select:focus {
-    border-color: var(--accent);
-  }
-
-  .row {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 16px;
-  }
-
-  /* Toggle */
-  .toggle-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-
-  .toggle {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-  }
-
+  input:focus { border-color: var(--accent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
   .toggle input { opacity: 0; width: 0; height: 0; }
-
-  .toggle-track {
-    position: absolute;
-    inset: 0;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: background 0.2s, border-color 0.2s;
-  }
-
-  .toggle-track::after {
-    content: '';
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    background: var(--muted);
-    border-radius: 50%;
-    top: 3px;
-    left: 3px;
-    transition: transform 0.2s, background 0.2s;
-  }
-
-  .toggle input:checked + .toggle-track {
-    background: rgba(255,60,60,0.15);
-    border-color: var(--accent);
-  }
-
-  .toggle input:checked + .toggle-track::after {
-    transform: translateX(20px);
-    background: var(--accent);
-  }
-
-  .toggle-label {
-    font-size: 14px;
-    color: var(--text);
-  }
-
-  .toggle-label small {
-    display: block;
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 2px;
-  }
-
-  /* Button */
+  .toggle-track { position: absolute; inset: 0; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; cursor: pointer; transition: all 0.2s; }
+  .toggle-track::after { content: ''; position: absolute; width: 16px; height: 16px; background: var(--muted); border-radius: 50%; top: 3px; left: 3px; transition: all 0.2s; }
+  .toggle input:checked + .toggle-track { background: rgba(255,60,60,0.15); border-color: var(--accent); }
+  .toggle input:checked + .toggle-track::after { transform: translateX(20px); background: var(--accent); }
+  .toggle-label { font-size: 14px; }
+  .toggle-label small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .section-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   button[type="submit"] {
-    width: 100%;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 2px;
-    font-family: var(--mono);
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 16px;
-    cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
+    width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 2px;
+    font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 16px; cursor: pointer; transition: all 0.15s; margin-top: 8px;
   }
-
   button[type="submit"]:hover { background: #e62e2e; }
-  button[type="submit"]:active { transform: scale(0.99); }
   button[type="submit"]:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
-
-  /* Progress */
+  .badge { display: inline-block; font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 2px; margin-left: 8px; vertical-align: middle; }
+  .badge-green { background: rgba(0,230,118,0.15); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+  .badge-red { background: rgba(255,60,60,0.15); color: var(--accent); border: 1px solid rgba(255,60,60,0.3); }
   #progress-card { display: none; }
-
-  .progress-bar-wrap {
-    height: 3px;
-    background: var(--surface2);
-    border-radius: 2px;
-    margin-bottom: 24px;
-    overflow: hidden;
-  }
-
-  .progress-bar {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    border-radius: 2px;
-    transition: width 0.4s ease;
-    width: 0%;
-  }
-
-  .log {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--muted);
-    max-height: 160px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .log-line { color: var(--muted); }
+  .progress-bar-wrap { height: 3px; background: var(--surface2); border-radius: 2px; margin-bottom: 24px; overflow: hidden; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), #ff7043); border-radius: 2px; transition: width 0.4s ease; width: 0%; }
+  .log { font-family: var(--mono); font-size: 12px; color: var(--muted); max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
   .log-line.done { color: var(--green); }
   .log-line.error { color: var(--accent); }
-
-  /* Clips */
   #clips-card { display: none; }
-
-  .clips-header {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 16px;
-  }
-
-  .clip-item {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 10px;
-    transition: border-color 0.15s;
-  }
-
+  .clips-header { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+  .clip-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 2px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; transition: border-color 0.15s; }
   .clip-item:hover { border-color: var(--accent); }
-
   .clip-info { flex: 1; min-width: 0; }
-
-  .clip-title {
-    font-size: 14px;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .clip-meta {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--muted);
-    margin-top: 4px;
-  }
-
-  .clip-reason {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 4px;
-  }
-
-  .dl-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    color: var(--text);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 8px 14px;
-    cursor: pointer;
-    white-space: nowrap;
-    text-decoration: none;
-    transition: border-color 0.15s, color 0.15s;
-    display: inline-block;
-  }
-
+  .clip-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .clip-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .dl-btn { background: transparent; border: 1px solid var(--border); border-radius: 2px; color: var(--text); font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 14px; cursor: pointer; white-space: nowrap; text-decoration: none; transition: all 0.15s; display: inline-block; }
   .dl-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-  .status-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    margin-right: 8px;
-    animation: pulse 1s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-
+  nav { display: flex; gap: 8px; margin-bottom: 48px; }
+  .nav-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 8px 16px; border: 1px solid var(--border); border-radius: 2px; color: var(--muted); text-decoration: none; transition: all 0.15s; }
+  .nav-btn:hover { border-color: #444; color: var(--text); }
+  .nav-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(255,60,60,0.08); }
+  .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 8px; animation: pulse 1s infinite; }
   .status-dot.done { background: var(--green); animation: none; }
   .status-dot.error { background: var(--accent); animation: none; }
-
-  .mode-btn {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 2px;
-    color: var(--muted);
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    padding: 8px 16px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .mode-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(255,60,60,0.08); }
-  .mode-btn:hover:not(.active) { border-color: #444; color: var(--text); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">// yt-clipper v1.0</div>
+    <nav>
+    <a href="/" class="nav-btn active">Clipper</a>
+    <a href="/downloader" class="nav-btn">Downloader</a>
+  </nav>
+  <div class="logo">// auto-clipper v2.0</div>
     <h1>Auto<span>Clip</span></h1>
-    <p class="subtitle">Paste a channel URL. Get highlights. Download clips.</p>
+    <p class="subtitle">YouTube or TikTok → clips → upload anywhere.</p>
   </header>
 
   <div class="card">
-    <div class="field" style="margin-bottom:16px;">
-      <div style="display:flex;gap:8px;">
-        <button type="button" class="mode-btn active" id="mode-channel" onclick="setMode('channel')">Channel</button>
-        <button type="button" class="mode-btn" id="mode-video" onclick="setMode('video')">Single Video</button>
-      </div>
+    <div class="section-title">Source</div>
+    <div class="field">
+      <label>YouTube or TikTok URL</label>
+      <input type="text" id="url" placeholder="YouTube channel, video URL, or TikTok video URL" />
     </div>
-
-    <div class="field" id="channel-field">
-      <label>YouTube Channel URL</label>
-      <input type="text" id="channel-url" placeholder="https://www.youtube.com/@ChannelName" />
-    </div>
-
-    <div class="field" id="video-field" style="display:none;">
-      <label>YouTube Video URL</label>
-      <input type="text" id="video-url" placeholder="https://www.youtube.com/watch?v=..." />
-    </div>
-
     <div class="row">
-      <div class="field" id="max-videos-field">
-        <label>Videos to process</label>
+      <div class="field">
+        <label>Videos (channel only)</label>
         <input type="number" id="max-videos" value="1" min="1" max="10" />
       </div>
       <div class="field">
@@ -391,29 +107,32 @@
       </div>
       <div class="field">
         <label>Clip length (mins)</label>
-        <input type="number" id="clip-length" value="5" min="1" max="30" />
+        <input type="number" id="clip-length" value="1" min="0.5" max="30" step="0.5" />
       </div>
     </div>
 
+    <div class="section-title" style="margin-top:8px;">Options</div>
+
     <div class="toggle-row">
-      <label class="toggle">
-        <input type="checkbox" id="use-ai" />
-        <span class="toggle-track"></span>
-      </label>
-      <div class="toggle-label">
-        AI highlight selection
-        <small>Uses OpenAI GPT-4 to pick the best moments (requires API key)</small>
-      </div>
+      <label class="toggle"><input type="checkbox" id="use-ai" /><span class="toggle-track"></span></label>
+      <div class="toggle-label">AI highlight selection<small>GPT-4 picks the best moments (needs OpenAI key)</small></div>
     </div>
 
     <div class="toggle-row">
-      <label class="toggle">
-        <input type="checkbox" id="upload-tiktok" />
-        <span class="toggle-track"></span>
-      </label>
+      <label class="toggle"><input type="checkbox" id="upload-tiktok" /><span class="toggle-track"></span></label>
+      <div class="toggle-label">Upload to TikTok<small>Opens Chrome with your saved TikTok session</small></div>
+    </div>
+
+    <div class="toggle-row">
+      <label class="toggle"><input type="checkbox" id="upload-youtube" {% if not youtube_ready %}disabled{% endif %} /><span class="toggle-track"></span></label>
       <div class="toggle-label">
-        Auto-upload to TikTok
-        <small>Opens browser to log in on first use — session saved after that</small>
+        Upload to YouTube
+        {% if youtube_ready %}
+        <span class="badge badge-green">Ready</span>
+        {% else %}
+        <span class="badge badge-red">Add client_secrets.json</span>
+        {% endif %}
+        <small>Uploads clips to your YouTube channel</small>
       </div>
     </div>
 
@@ -425,9 +144,7 @@
       <span class="status-dot" id="status-dot"></span>
       <span style="font-family:var(--mono);font-size:12px;" id="status-text">Starting…</span>
     </div>
-    <div class="progress-bar-wrap">
-      <div class="progress-bar" id="progress-bar"></div>
-    </div>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar"></div></div>
     <div class="log" id="log"></div>
   </div>
 
@@ -439,51 +156,32 @@
 
 <script>
   let pollInterval = null;
-  let currentMode = 'channel';
-
-  function setMode(mode) {
-    currentMode = mode;
-    document.getElementById('channel-field').style.display = mode === 'channel' ? 'block' : 'none';
-    document.getElementById('video-field').style.display = mode === 'video' ? 'block' : 'none';
-    document.getElementById('max-videos-field').style.display = mode === 'channel' ? 'block' : 'none';
-    document.getElementById('mode-channel').classList.toggle('active', mode === 'channel');
-    document.getElementById('mode-video').classList.toggle('active', mode === 'video');
-  }
 
   async function startJob() {
-    let channelUrl = '';
-    let videoUrl = '';
-
-    if (currentMode === 'channel') {
-      channelUrl = document.getElementById('channel-url').value.trim();
-      if (!channelUrl) { alert('Please enter a YouTube channel URL.'); return; }
-    } else {
-      videoUrl = document.getElementById('video-url').value.trim();
-      if (!videoUrl) { alert('Please enter a YouTube video URL.'); return; }
-    }
+    const url = document.getElementById('url').value.trim();
+    if (!url) { alert('Please enter a URL.'); return; }
 
     const btn = document.getElementById('start-btn');
     btn.disabled = true;
     btn.textContent = 'Processing…';
-
     document.getElementById('progress-card').style.display = 'block';
     document.getElementById('clips-card').style.display = 'none';
     document.getElementById('clips-list').innerHTML = '';
     document.getElementById('log').innerHTML = '';
     document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('status-dot').className = 'status-dot';
 
     const res = await fetch('/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        channel_url: channelUrl,
-        video_url: videoUrl,
-        mode: currentMode,
+        url,
         max_videos: document.getElementById('max-videos').value,
         clips_per_video: document.getElementById('clips-per-video').value,
         clip_length: document.getElementById('clip-length').value,
         use_ai: document.getElementById('use-ai').checked,
         upload_tiktok: document.getElementById('upload-tiktok').checked,
+        upload_youtube: document.getElementById('upload-youtube').checked,
       })
     });
 
@@ -495,69 +193,51 @@
     const res = await fetch(`/status/${jobId}`);
     const job = await res.json();
 
-    // Update progress bar
     document.getElementById('progress-bar').style.width = job.progress + '%';
 
-    // Update log
     const logEl = document.getElementById('log');
     logEl.innerHTML = job.log.map(line => {
-      const cls = line.startsWith('✓') || line.startsWith('All done') ? 'done'
-                : line.startsWith('Error') ? 'error' : '';
+      const cls = line.startsWith('✓') ? 'done' : line.startsWith('✗') || line.startsWith('Error') ? 'error' : '';
       return `<div class="log-line ${cls}">${line}</div>`;
     }).join('');
     logEl.scrollTop = logEl.scrollHeight;
 
-    // Update status dot
-    const dot = document.getElementById('status-dot');
-    const statusText = document.getElementById('status-text');
+    document.getElementById('status-text').textContent = job.log.at(-1) || 'Running…';
 
     if (job.status === 'done') {
       clearInterval(pollInterval);
-      dot.className = 'status-dot done';
-      statusText.textContent = 'Done!';
+      document.getElementById('status-dot').className = 'status-dot done';
+      document.getElementById('status-text').textContent = 'Done!';
       document.getElementById('start-btn').disabled = false;
       document.getElementById('start-btn').textContent = 'Start Clipping';
       showClips(job.clips);
     } else if (job.status === 'error') {
       clearInterval(pollInterval);
-      dot.className = 'status-dot error';
-      statusText.textContent = 'Error — check log above';
+      document.getElementById('status-dot').className = 'status-dot error';
       document.getElementById('start-btn').disabled = false;
       document.getElementById('start-btn').textContent = 'Start Clipping';
-    } else {
-      statusText.textContent = job.log.at(-1) || 'Running…';
     }
   }
 
   function showClips(clips) {
     if (!clips || clips.length === 0) return;
-
-    const card = document.getElementById('clips-card');
-    const list = document.getElementById('clips-list');
-    card.style.display = 'block';
-
-    list.innerHTML = clips.map(clip => {
-      const start = formatTime(clip.start);
-      const end = formatTime(clip.end);
-      const duration = formatTime(clip.end - clip.start);
-      return `
-        <div class="clip-item">
-          <div class="clip-info">
-            <div class="clip-title">${clip.title}</div>
-            <div class="clip-meta">${start} → ${end} &nbsp;·&nbsp; ${duration}</div>
-            ${clip.reason ? `<div class="clip-reason">${clip.reason}</div>` : ''}
-          </div>
-          <a class="dl-btn" href="/download/${encodeURIComponent(clip.filename)}">Download</a>
-        </div>`;
+    document.getElementById('clips-card').style.display = 'block';
+    document.getElementById('clips-list').innerHTML = clips.map(clip => {
+      const start = fmt(clip.start), end = fmt(clip.end), dur = fmt(clip.end - clip.start);
+      return `<div class="clip-item">
+        <div class="clip-info">
+          <div class="clip-title">${clip.title}</div>
+          <div class="clip-meta">${start} → ${end} · ${dur}</div>
+          ${clip.reason ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${clip.reason}</div>` : ''}
+        </div>
+        <a class="dl-btn" href="/download/${encodeURIComponent(clip.filename)}">Download</a>
+      </div>`;
     }).join('');
   }
 
-  function formatTime(seconds) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-    return `${m}:${String(s).padStart(2,'0')}`;
+  function fmt(s) {
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
+    return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
   }
 </script>
 </body>
