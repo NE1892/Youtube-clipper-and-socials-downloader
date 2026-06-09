@@ -211,6 +211,24 @@ async def _upload_single(clip_path: Path, title: str, video_title: str = ""):
                 break
             print(f"    Post button not found, waiting... (attempt {attempt+1}/5)")
             await human_delay(3000, 5000)
+        
+        if posted:
+            await human_delay(2000, 3000)
+            confirm_selectors = [
+                "button:has-text('Post now')",
+                "button:has-text('Confirm')",
+                "button:has-text('Continue')",
+                "button:has-text('OK')",
+            ]
+            for selector in confirm_selectors:
+                try:
+                    btn = page.locator(selector)
+                    if await btn.count() > 0:
+                        await btn.last.click()
+                        print("    Clicked confirmation popup.")
+                        break
+                except Exception:
+                    continue
 
         if not posted:
             print("    Could not find Post button — please click it manually.")
