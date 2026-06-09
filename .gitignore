@@ -1,0 +1,6 @@
+.env
+clipper_output/
+__pycache__/
+*.pyc
+*.pyo
+youtube_token.json
