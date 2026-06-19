@@ -419,6 +419,13 @@ def clip_existing():
             video_id = video_path.stem
             log(f"Using existing download: {filename}", 10)
 
+            youtube_svc = None
+            if data.get("upload_youtube") and SECRETS_FILE.exists():
+                try:
+                    youtube_svc = yc.get_youtube_service()
+                except Exception as e:
+                    log(f"YouTube auth failed: {e}")
+
             duration = yc.get_video_duration(video_path)
             start_time = data.get("start_time", "")
             end_time = data.get("end_time", "")
@@ -447,6 +454,29 @@ def clip_existing():
                         "end": clip["end_seconds"],
                     })
                     log(f"✓ Ready: {clip['title']}")
+
+                    if data.get("upload_tiktok"):
+                        log(f"Uploading to TikTok: {clip['title']}…")
+                        success = upload_to_tiktok(out_path, clip["title"], filename)
+                        log(f"{'✓ Uploaded to TikTok' if success else '✗ TikTok upload failed'}")
+
+                    if data.get("upload_youtube") and youtube_svc:
+                        log(f"Uploading to YouTube: {clip['title']}…")
+                        try:
+                            short_path = out_path.parent / (out_path.stem + "_yt.mp4")
+                            subprocess.run([
+                                "ffmpeg", "-y", "-i", str(out_path),
+                                "-t", "59",
+                                "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
+                                "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+                                "-c:a", "aac", "-b:a", "128k",
+                                str(short_path)
+                            ], capture_output=True)
+                            yt_path = short_path if short_path.exists() else out_path
+                            yc.upload_clip(youtube_svc, yt_path, clip, filename)
+                            log(f"✓ Uploaded to YouTube")
+                        except Exception as e:
+                            log(f"✗ YouTube upload failed: {e}")
 
             jobs[job_id]["status"] = "done"
             log(f"All done! {len(out_paths)} clips ready.", 100)
