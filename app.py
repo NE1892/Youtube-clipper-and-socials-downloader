@@ -381,6 +381,86 @@ def get_created(filename):
     return send_file(str(file_path), as_attachment=True)
 
 
+@app.route("/list-downloads")
+def list_downloads():
+    downloads_dir = yc.WORK_DIR / "downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    files = []
+    for f in downloads_dir.glob("*.mp4"):
+        files.append({"filename": f.name, "size_mb": round(f.stat().st_size / 1024 / 1024, 1)})
+    files.sort(key=lambda x: x["filename"])
+    return jsonify(files)
+
+
+@app.route("/clip-existing", methods=["POST"])
+def clip_existing():
+    data = request.json
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {"status": "running", "log": [], "progress": 0, "clips": []}
+
+    def run_existing():
+        def log(msg, progress=None):
+            jobs[job_id]["log"].append(msg)
+            if progress is not None:
+                jobs[job_id]["progress"] = progress
+
+        try:
+            yc.ensure_dirs()
+            yc.CLIPS_PER_VIDEO = int(data.get("clips_per_video", 3))
+            yc.CLIP_LENGTH_MINUTES = float(data.get("clip_length", 1))
+
+            filename = data.get("filename")
+            video_path = yc.WORK_DIR / "downloads" / filename
+            if not video_path.exists():
+                jobs[job_id]["status"] = "error"
+                log(f"File not found: {filename}")
+                return
+
+            video_id = video_path.stem
+            log(f"Using existing download: {filename}", 10)
+
+            duration = yc.get_video_duration(video_path)
+            start_time = data.get("start_time", "")
+            end_time = data.get("end_time", "")
+            clips = yc.pick_clips_randomly(duration, filename, start_time, end_time)
+
+            log(f"Cutting {len(clips)} clips...", 50)
+            # Don't delete source when using existing downloads
+            clips_dir = yc.WORK_DIR / "clips"
+            import re, subprocess
+            out_paths = []
+            for i, clip in enumerate(clips, 1):
+                safe_title = re.sub(r"[^\w\s-]", "", clip["title"])[:50].strip().replace(" ", "_")
+                out_path = clips_dir / f"{video_id}_clip{i}_{safe_title}.mp4"
+                start = yc.format_timestamp(clip["start_seconds"])
+                dur = clip["end_seconds"] - clip["start_seconds"]
+                cmd = ["ffmpeg", "-y", "-ss", start, "-i", str(video_path),
+                       "-t", str(dur), "-c", "copy", str(out_path)]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    out_paths.append((out_path, clip))
+                    jobs[job_id]["clips"].append({
+                        "filename": out_path.name,
+                        "title": clip["title"],
+                        "reason": clip.get("reason", ""),
+                        "start": clip["start_seconds"],
+                        "end": clip["end_seconds"],
+                    })
+                    log(f"✓ Ready: {clip['title']}")
+
+            jobs[job_id]["status"] = "done"
+            log(f"All done! {len(out_paths)} clips ready.", 100)
+
+        except Exception as e:
+            import traceback
+            jobs[job_id]["status"] = "error"
+            log(f"Error: {e}")
+            print(traceback.format_exc())
+
+    threading.Thread(target=run_existing, daemon=True).start()
+    return jsonify({"job_id": job_id})
+
+
 if __name__ == "__main__":
     import webbrowser, time
     yc.ensure_dirs()

@@ -151,6 +151,37 @@
     <button type="submit" id="start-btn" onclick="startJob()">Start Clipping</button>
   </div>
 
+  <div class="card" id="existing-card">
+    <div class="section-title" style="cursor:pointer;" onclick="toggleExisting()">📁 Use existing download <span id="existing-arrow">▼</span></div>
+    <div id="existing-body" style="display:none;margin-top:16px;">
+      <div class="field">
+        <label>Downloaded videos</label>
+        <select id="existing-file" style="width:100%;"></select>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Clips</label>
+          <input type="number" id="existing-clips" value="3" min="1" max="100" />
+        </div>
+        <div class="field">
+          <label>Clip length (mins)</label>
+          <input type="number" id="existing-length" value="1" min="0.5" max="30" step="0.5" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Start time</label>
+          <input type="text" id="existing-start" placeholder="e.g. 01:30:00" />
+        </div>
+        <div class="field">
+          <label>End time</label>
+          <input type="text" id="existing-end" placeholder="e.g. 05:00:00" />
+        </div>
+      </div>
+      <button type="button" onclick="clipExisting()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--mono);font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:12px;cursor:pointer;">Clip This File</button>
+    </div>
+  </div>
+
   <div class="card" id="progress-card">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
       <span class="status-dot" id="status-dot"></span>
@@ -168,6 +199,50 @@
 
 <script>
   let pollInterval = null;
+
+  async function toggleExisting() {
+    const body = document.getElementById('existing-body');
+    const arrow = document.getElementById('existing-arrow');
+    if (body.style.display === 'none') {
+      body.style.display = 'block';
+      arrow.textContent = '▲';
+      // Load existing downloads
+      const res = await fetch('/list-downloads');
+      const files = await res.json();
+      const sel = document.getElementById('existing-file');
+      sel.innerHTML = files.length === 0
+        ? '<option>No downloads found</option>'
+        : files.map(f => `<option value="${f.filename}">${f.filename} (${f.size_mb} MB)</option>`).join('');
+    } else {
+      body.style.display = 'none';
+      arrow.textContent = '▼';
+    }
+  }
+
+  async function clipExisting() {
+    const filename = document.getElementById('existing-file').value;
+    if (!filename || filename === 'No downloads found') { alert('No file selected.'); return; }
+
+    document.getElementById('progress-card').style.display = 'block';
+    document.getElementById('clips-card').style.display = 'none';
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('status-dot').className = 'status-dot';
+
+    const res = await fetch('/clip-existing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        clips_per_video: document.getElementById('existing-clips').value,
+        clip_length: document.getElementById('existing-length').value,
+        start_time: document.getElementById('existing-start').value,
+        end_time: document.getElementById('existing-end').value,
+      })
+    });
+    const { job_id } = await res.json();
+    pollInterval = setInterval(() => pollStatus(job_id), 1500);
+  }
 
   async function startJob() {
     const url = document.getElementById('url').value.trim();
