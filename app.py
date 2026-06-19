@@ -14,6 +14,7 @@ import yt_dlp
 from flask import Flask, jsonify, render_template, request, send_file
 
 import yt_clipper as yc
+import video_creator as vc
 from tiktok_uploader import upload_to_tiktok
 
 app = Flask(__name__)
@@ -33,7 +34,7 @@ def is_video_url(url):
     return "watch?v=" in url or "youtu.be/" in url or "tiktok.com" in url or "vm.tiktok.com" in url
 
 
-def run_job(job_id, url, max_videos, use_ai, clips_per_video, clip_length, upload_tiktok=False, upload_youtube=False):
+def run_job(job_id, url, max_videos, use_ai, clips_per_video, clip_length, upload_tiktok=False, upload_youtube=False, start_time="", end_time=""):
 
     def log(msg, progress=None):
         jobs[job_id]["log"].append(msg)
@@ -88,7 +89,7 @@ def run_job(job_id, url, max_videos, use_ai, clips_per_video, clip_length, uploa
             else:
                 log("Picking random clip points…", base + 50)
                 duration = yc.get_video_duration(video_path)
-                clips = yc.pick_clips_randomly(duration, video["title"])
+                clips = yc.pick_clips_randomly(duration, video["title"], start_time, end_time)
 
             log(f"Cutting {len(clips)} clips…", base + 65)
             clip_files = yc.cut_clips(video_path, clips, video["id"])
@@ -162,6 +163,8 @@ def start():
             float(data.get("clip_length", 5)),
             data.get("upload_tiktok", False),
             data.get("upload_youtube", False),
+            data.get("start_time", ""),
+            data.get("end_time", ""),
         ),
         daemon=True,
     ).start()
@@ -258,6 +261,121 @@ def download_status(job_id):
 @app.route("/get-video/<filename>")
 def get_video(filename):
     file_path = yc.WORK_DIR / "downloads" / filename
+    if not file_path.exists():
+        return "File not found", 404
+    return send_file(str(file_path), as_attachment=True)
+
+
+# ---------------------------------------------------------------------------
+# Creator routes
+# ---------------------------------------------------------------------------
+
+create_jobs = {}
+
+
+def run_create(job_id, mode, topic, character, upload_tiktok, upload_youtube):
+
+    def log(msg, progress=None):
+        create_jobs[job_id]["log"].append(msg)
+        if progress is not None:
+            create_jobs[job_id]["progress"] = progress
+
+    try:
+        youtube = None
+        if upload_youtube and SECRETS_FILE.exists():
+            log("Authenticating with YouTube…", 5)
+            try:
+                youtube = yc.get_youtube_service()
+            except Exception as e:
+                log(f"YouTube auth failed: {e}")
+
+        log("Generating script with GPT-4…", 10)
+
+        if mode == "reddit":
+            result = vc.create_reddit_story(topic)
+        else:
+            result = vc.create_cartoon(topic, character)
+
+        log(f"✓ Script: {result['title']}", 40)
+        log("Generating voiceover…", 45)
+        log("Rendering frames…", 50)
+        log("Combining video…", 85)
+
+        clip_path = result["path"]
+        log(f"✓ Video created: {clip_path.name}", 90)
+
+        create_jobs[job_id]["title"] = result["title"]
+        create_jobs[job_id]["script"] = result["script"]
+        create_jobs[job_id]["filename"] = clip_path.name
+
+        if upload_tiktok:
+            log("Uploading to TikTok…")
+            success = upload_to_tiktok(clip_path, result["title"], result["title"])
+            log(f"{'✓ Uploaded to TikTok' if success else '✗ TikTok upload failed'}")
+
+        if upload_youtube and youtube:
+            log("Uploading to YouTube…")
+            try:
+                import subprocess
+                # Ensure vertical 9:16 and under 60s for Shorts
+                short_path = clip_path.parent / (clip_path.stem + "_yt.mp4")
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", str(clip_path),
+                    "-t", "59",
+                    "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
+                    "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+                    "-c:a", "aac", "-b:a", "128k",
+                    str(short_path)
+                ], capture_output=True)
+                yt_path = short_path if short_path.exists() else clip_path
+                clip_info = {"title": result["title"], "reason": "", "start_seconds": 0, "end_seconds": 59}
+                yc.upload_clip(youtube, yt_path, clip_info, result["title"])
+                log("✓ Uploaded to YouTube")
+            except Exception as e:
+                log(f"✗ YouTube upload failed: {e}")
+
+        create_jobs[job_id]["status"] = "done"
+        log("All done!", 100)
+
+    except Exception as e:
+        import traceback
+        create_jobs[job_id]["status"] = "error"
+        log(f"Error: {e}")
+        print(traceback.format_exc())
+
+
+@app.route("/creator")
+def creator():
+    return render_template("creator.html")
+
+
+@app.route("/create-video", methods=["POST"])
+def create_video():
+    data = request.json
+    job_id = str(uuid.uuid4())[:8]
+    create_jobs[job_id] = {"status": "running", "log": [], "progress": 0, "title": "", "script": "", "filename": ""}
+
+    threading.Thread(
+        target=run_create,
+        args=(job_id, data.get("mode", "reddit"), data.get("topic", ""),
+              data.get("character", "cat"), data.get("upload_tiktok", False),
+              data.get("upload_youtube", False)),
+        daemon=True,
+    ).start()
+    return jsonify({"job_id": job_id})
+
+
+@app.route("/create-status/<job_id>")
+def create_status(job_id):
+    job = create_jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    return jsonify(job)
+
+
+@app.route("/get-created/<filename>")
+def get_created(filename):
+    file_path = vc.VIDEOS_DIR / filename
     if not file_path.exists():
         return "File not found", 404
     return send_file(str(file_path), as_attachment=True)

@@ -26,7 +26,7 @@ WORK_DIR = Path(os.environ.get("WORK_DIR", str(Path(__file__).parent / "clipper_
 CLIPS_PER_VIDEO = int(os.environ.get("CLIPS_PER_VIDEO", "3"))
 CLIP_LENGTH_MINUTES = float(os.environ.get("CLIP_LENGTH_MINUTES", "5"))
 PROCESSED_LOG = WORK_DIR / "processed_videos.json"
-UPLOAD_PRIVACY = os.environ.get("UPLOAD_PRIVACY", "public")
+UPLOAD_PRIVACY = os.environ.get("UPLOAD_PRIVACY", "private")
 
 
 def ensure_dirs():
